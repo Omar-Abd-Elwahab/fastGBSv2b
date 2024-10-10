@@ -1,13 +1,15 @@
-# **Fast-GBS.v2: An Analysis Toolkit for Genotyping-by-Sequencing data**
+# **Fast-GBS.v2b: An Analysis Toolkit for Genotyping-by-Sequencing data**
 
 
 
 ## Introduction
 
-Genotyping-by-sequencing (GBS) is a rapid, flexible, low cost and robust genome-wide scanning method of multiplexed samples for large-scale molecular marker discovery and genotyping. These characteristics make GBS an excellent tool for many applications and research questions from conservation to functional genomics in both model non-model species with complex genomes or limited available resources. Continued improvement of GBS relies on a more comprehensive understanding of data analysis, missing data imputation challenges and an active after-development support. Here, we present Fast-GBS.v2, a comprehensive analysis tool set for GBS data analysis and missing data imputation. 
+Genotyping-by-sequencing (GBS) is a rapid, flexible, low cost and robust genome-wide scanning method of multiplexed samples for large-scale molecular marker discovery and genotyping. These characteristics make GBS an excellent tool for many applications and research questions from conservation to functional genomics in both model non-model species with complex genomes or limited available resources. Continued improvement of GBS relies on a more comprehensive understanding of data analysis, missing data imputation challenges and an active after-development support. Here, we present Fast-GBS.v2b, a comprehensive analysis tool set for GBS data analysis and missing data imputation. 
 
+## Modifications in this version
+This version of fastGBS 
 
-**A comprehensive documentation can be found in Fast-GBS_V2 Wiki page (left toolbar)**
+**A comprehensive documentation can be found in Fast-GBS_V2b Wiki page (left toolbar)**
 
 
 
