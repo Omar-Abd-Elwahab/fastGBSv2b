@@ -277,7 +277,7 @@ if [ "${seqtype}" = "SE" ]
 	if [ "${Step}" != "CUTADAP" ]
 		then
 			cd data
-			parallel -j "${nbcor}" cutadapt --cores=0 -a ${adapfor} -m ${readlen} -o {}.fastq {}.fq ::: $(ls -1 *.fq | sed 's/.fq//')
+			parallel -j "${nbcor}" cutadapt -a ${adapfor} -m ${readlen} -o {}.fastq {}.fq ::: $(ls -1 *.fq | sed 's/.fq//')
 			if [ $? -ne 0 ]
 				then 
 					printf "\t!!! There is a problem in the cutadapt step\n" | tee -a ../"${logfile}"
@@ -316,7 +316,7 @@ if [ "${seqtype}" = "SE" ]
 	if [ "${Step}" != "ALIGN" ]
 		then printf "\tStep no. 8: Alignment of single-end reads\n\n" | tee -a "${logfile}"
 		cd data
-		parallel -j "${bwapar}" bwa mem -t "${bwathr}" ../refgenome/"${refgen}" {}.fastq | samtools view --threads="${bwapar}" -b -o {}.temp.bam - ::: $(ls -1 *.fastq | sed 's/.fastq//')
+		parallel -j "${bwapar}" bwa mem -t "${bwathr}" ../refgenome/"${refgen}" {}.fastq ">" {}.sam ::: $(ls -1 *.fastq | sed 's/.fastq//')
 		if [ $? -ne 0 ]
 			then 
 				printf "\t!!! There is a problem in the alignment step\n" | tee -a ../"${logfile}"
@@ -392,7 +392,7 @@ elif [ "${seqtype}" = "PE" ]
 	if [ "${Step}" != "CUTADAP" ]
 		then
 			cd data
-			parallel -j "${nbcor}" cutadapt --cores=0 -a ${adapfor} -A ${adaprev} -m ${readlen} -o {}_R1.fastq -p {}_R2.fastq {}_R1.fq {}_R2.fq ::: $(ls -1 *_R1.fq | sed 's/_R1.fq//')
+			parallel -j "${nbcor}" cutadapt -a ${adapfor} -A ${adaprev} -m ${readlen} -o {}_R1.fastq -p {}_R2.fastq {}_R1.fq {}_R2.fq ::: $(ls -1 *_R1.fq | sed 's/_R1.fq//')
 			if [ $? -ne 0 ]
 				then 
 					printf "\t!!! There is a problem in the cutadapt step\n" | tee -a ../"${logfile}"
@@ -433,7 +433,7 @@ elif [ "${seqtype}" = "PE" ]
 	if [ "${Step}" != "ALIGN" ]
 		then printf "\tStep no. 8: Alignment of paired-end reads\n\n" | tee -a "${logfile}"
 		cd data
-		parallel -j "${bwapar}" bwa mem -t "${bwathr}" ../refgenome/"${refgen}" {}_R1.fastq {}_R2.fastq | samtools view --threads="${bwapar}" -b -o {}.temp.bam - ::: $(ls -1 *_R1.fastq | sed 's/_R1.fastq//')
+		parallel -j "${bwapar}" bwa mem -t "${bwathr}" ../refgenome/"${refgen}" {}_R1.fastq {}_R2.fastq ">" {}.sam ::: $(ls -1 *_R1.fastq | sed 's/_R1.fastq//')
 		if [ $? -ne 0 ]
 			then 
 				printf "\t!!! There is a problem in the alignment step\n" | tee -a ../"${logfile}"
@@ -448,13 +448,30 @@ elif [ "${seqtype}" = "PE" ]
 
 fi
 
+printf "\nConvert sam files into bam files\n" | tee -a "${logfile}"
+Step=$(grep "SAM2BAM" checkpoint_${1})
+if [ "${Step}" != "SAM2BAM" ]
+	then
+		cd data
+		parallel -j "${nbcor}" samtools view -b -S -h {}.sam ">" {}.temp.bam ::: $(ls -1 *.sam | sed 's/.sam//')
+		if [ $? -ne 0 ]
+			then 
+				printf "\t!!! There is a problem in the samtools-view step\n" | tee -a ../"${logfile}"
+				exit 1
+		fi
+
+		cd ..
+		printf "SAM2BAM\n" >> checkpoint_${1}
+else
+	printf  "\tThe variable SAM2BAM is in the checkpoint file. This step will be passed\n" | tee -a "${logfile}"
+fi
 
 printf "\nSort of the bam files\n" | tee -a "${logfile}"
 Step=$(grep "SORTBAM" checkpoint_${1})
 if [ "${Step}" != "SORTBAM" ]
 	then
 		cd data
-		parallel -j "${nbcor}" samtools --threads="${nbcor}" sort {}.temp.bam -o {}.sort.bam ::: $(ls -1 *.temp.bam | sed 's/.temp.bam//')
+		parallel -j "${nbcor}" samtools sort {}.temp.bam -o {}.sort.bam ::: $(ls -1 *.temp.bam | sed 's/.temp.bam//')
 		if [ $? -ne 0 ]
 			then 
 				printf "\t!!! There is a problem in the samtools-sort step\n" | tee -a ../"${logfile}"
@@ -471,7 +488,7 @@ Step=$(grep "INDEXBAM" checkpoint_${1})
 if [ "${Step}" != "INDEXBAM" ]
 	then
 		cd data
-		parallel -j "${nbcor}" samtools index --threads="${nbcor}" {} ::: $(ls -1 *.sort.bam)
+		parallel -j "${nbcor}" samtools index {} ::: $(ls -1 *.sort.bam)
 		if [ $? -ne 0 ]
 			then 
 				printf "\t!!! There is a problem in the samtools-index step\n" | tee -a ../"${logfile}"
@@ -539,52 +556,70 @@ fi
 printf "\nSearch the variants with bcftools\n" | tee -a "${logfile}"
 Step=$(grep "BCFTOOLS" checkpoint_${1})
 if [ "${Step}" != "BCFTOOLS" ]
-	then
-		cd results
-		
-		if [ "${source}" = "None" ]
-			then sopt=""
-		else
-			sopt="--source=${source}"
-		fi
+        then
+                cd results
 
-		parallel -j "${nbcor}" bcftools mpileup --threads="${nbcor}" \
-  		-Ou -f ../refgenome/"${refgen}" \
-		-min-MQ="${minMapQual}" --min-BQ="${minBaseQual}" \
-		"${genIndels}" \
- 		-b ../results/"${bamlist}" ${sopt} | bcftools call --threads="${nbcor}" -mv -Oz -o "${outplat}".vcf
+                if [ "${source}" = "None" ]
+                        then sopt=""
+                else
+                        sopt="--source=${source}"
+                fi
 
+                #############################################################################################
+                # From /home/vtbos/scripts/fast-gbs-v2B/fast-gbs-v2B.sh
+                bcftools mpileup --threads="${nbcor}" \
+                -Ou -f ../refgenome/"${refgen}" \
+                -min-MQ="${minMapQual}" --min-BQ="${minBaseQual}" \
+                "${genIndels}" \
+                -b ../results/"${bamlist}" ${sopt} --annotate FORMAT/DP,FORMAT/AD | \
 
-		if [ $? -ne 0 ]
-			then 
-				printf "\t!!! There is a problem at the bcftools step\n" | tee -a ../"${logfile}"
-				exit 1
-		fi
+                bcftools call --threads="${nbcor}" -mv -Oz -o raw.vcf
 
-            	# Extract and clean the #CHROM line from the VCF in one step
-    		zcat "${outplat}" | awk 'BEGIN{OFS="\t"} /^#CHROM/ {
-        		for(i=1; i<=NF; i++) {
-            			if(i > 9) {
-                			sub(/.*\//, "", $i); 
-                			sub(/\.sort\.bam$/, "", $i); 
-            			}
-        		}
-        		print > "chrom_line_cleaned.txt"
-        		next
-    		} {print}' | bgzip > temp_${outplat}
+                #bcftools view --threads="${nbcor}" -q 0.002:minor raw.vcf -Oz -o "${outplat}".vcf
+                bcftools view --threads="${nbcor}" -i 'FORMAT/DP>=2' raw.vcf | \
+                bcftools view --threads="${nbcor}" -q 0.002:minor -Oz -o "${outplat}".vcf
 
-    if [ $? -ne 0 ]; then 
-        printf "\t!!! There is a problem at the processing step\n" | tee -a ../"${logfile}"
-        exit 1
-    fi
+                #############################################################################################
 
-    mv temp_${outplat} "${outplat}"
-    rm chrom_line_cleaned.txt
+                if [ $? -ne 0 ]
+                        then 
+                                printf "\t!!! There is a problem at the bcftools step\n" | tee -a ../"${logfile}"
+                                exit 1
+                fi
 
-	    cd ..
-	    printf "BCFTOOLS\n" >> checkpoint_${1}
+        # Extract and clean the #CHROM line from the VCF
+    	cat "${outplat}".vcf | awk 'BEGIN{OFS="\t"} /^#CHROM/ {
+			for(i=1; i<=NF; i++) {
+				if(i > 9) {
+					sub(/.*\//, "", $i); 
+					sub(/\.sort\.bam$/, "", $i); 
+				}
+			}
+			print
+		}' > chrom_line_cleaned.txt
+
+    	# Replace the old #CHROM line in the VCF file with the cleaned one
+    	cat "${outplat}".vcf | awk -v new_line="$(cat chrom_line_cleaned.txt)" '{
+        	if(/^#CHROM/) {
+            	print new_line
+        	} else {
+            	print
+        	}
+    	}' > temp_"${outplat}".vcf
+
+    	mv temp_"${outplat}".vcf "${outplat}".vcf
+    	rm chrom_line_cleaned.txt
+		rm raw.vcf
+
+    	if [ $? -ne 0 ]; then 
+        	printf "\t!!! There is a problem at the processing step\n" | tee -a ../"${logfile}"
+        	exit 1
+    	fi
+
+            cd ..
+            printf "BCFTOOLS\n" >> checkpoint_${1}
 else
-	printf  "\tThe variable BCFTools is in the checkpoint file. This step will be passed\n" | tee -a "${logfile}"
+        printf  "\tThe variable BCFTools is in the checkpoint file. This step will be passed\n" | tee -a "${logfile}"
 fi
 
 printf "\nImputation of the vcf file\n" | tee -a "${logfile}"

@@ -21,4 +21,4 @@ module load bcftools
 
 ulimit -S -n 40000
 
-./fastgbs_V2.sh parameters_V2.txt
+./FastGBS-v2B.sh parameters_V2.txt
